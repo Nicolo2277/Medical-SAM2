@@ -41,7 +41,7 @@ def train_sam(args, net: nn.Module, optimizer, train_loader, epoch, writer):
     epoch_loss = 0
     memory_bank_list = []
     lossfunc = criterion_G
-    feat_sizes = [(256, 256), (128, 128), (64, 64)]
+    feat_sizes = [(64, 64), (32, 32), (16, 16)] #If you change the image dimensions[(256, 256), (128, 128), (64, 64)]
 
 
     with tqdm(total=len(train_loader), desc=f'Epoch {epoch}', unit='img') as pbar:
@@ -277,7 +277,7 @@ def validation_sam(args, val_loader, epoch, net: nn.Module, clean_dir=True):
     # init
     lossfunc = criterion_G
     memory_bank_list = []
-    feat_sizes = [(256, 256), (128, 128), (64, 64)]
+    feat_sizes = [(64, 64), (32, 32), (16, 16)] #If you change the image dimensions[(256, 256), (128, 128), (64, 64)]
     total_loss = 0
     total_eiou = 0
     total_dice = 0
@@ -332,7 +332,7 @@ def validation_sam(args, val_loader, epoch, net: nn.Module, clean_dir=True):
                     memory_pos_stack_ori = torch.stack(to_cat_memory_pos, dim=0)
                     image_embed_stack_ori = torch.stack(to_cat_image_embed, dim=0)
 
-                    vision_feats_temp = vision_feats[-1].permute(1, 0, 2).view(B, -1, 64, 64) 
+                    vision_feats_temp = vision_feats[-1].permute(1, 0, 2).reshape(B, -1, 64, 64) 
                     vision_feats_temp = vision_feats_temp.reshape(B, -1)
 
                     image_embed_stack_ori = F.normalize(image_embed_stack_ori, p=2, dim=1)
