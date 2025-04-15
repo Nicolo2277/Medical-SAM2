@@ -1,4 +1,4 @@
-'''Training script for OTU_2d dataset'''
+'''Training script for OTU_2d and main dataset'''
 import os
 import time
 import random

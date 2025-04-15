@@ -110,9 +110,10 @@ class MainDataset(Dataset):
         filename = os.path.basename(frame_path)
 
         image_meta_dict = {'filename_or_obj':filename,
-                           'frame_path': frame_path,
-                           'mask_path': mask_path,
-                           'fan_path': fan_path}
+                           #'frame_path': frame_path,
+                           #'mask_path': mask_path,
+                           #'fan_path': fan_path
+                           }
         return {
             'image': frame,
             'p_label': point_label,

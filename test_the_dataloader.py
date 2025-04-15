@@ -59,10 +59,10 @@ def test_loader(data_dir):
         mask_resized = sample['mask']
         meta = sample['image_meta_dict']
 
-        print(f'Sample {i}')
-        print('Frame path: ', meta['frame_path'])
-        print('Mask path: ', meta['mask_path'])
-        print('Fan path: ', meta['fan_path'])
+        #print(f'Sample {i}')
+        #print('Frame path: ', meta['frame_path'])
+        #print('Mask path: ', meta['mask_path'])
+        #print('Fan path: ', meta['fan_path'])
 
         # Convert tensors to numpy arrays.
         frame_np = frame.permute(1, 2, 0).numpy()
