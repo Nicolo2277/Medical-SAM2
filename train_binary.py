@@ -1,20 +1,28 @@
 '''Training script for OTU_2d dataset'''
 import os
 import time
-
+import random
 import torch
 import torch.optim as optim
 import torchvision.transforms as transforms
 from tensorboardX import SummaryWriter
 #from dataset import *
-from torch.utils.data import DataLoader, random_split
+from torch.utils.data import DataLoader, random_split, ConcatDataset
 
 import cfg
 import func_2d.function as function
 from conf import settings  #maybe global_settings?
 #from models.discriminatorlayer import discriminator
-from func_2d.OTU_dataset import * #change here if the dataset is changed(or add another dataloader to the import)
+from func_2d.OTU_dataset import *
 from func_2d.utils import *
+from func_2d.main_dataset import *
+
+def get_video_dir(root_dir):
+    video_dirs = []
+    for root, dirs, files in os.walk(root_dir):
+         if "frame.png" in files and "background.png" in files:
+            video_dirs.append(root)
+    return sorted(video_dirs)
 
 def main():
     #Use bfloat16
@@ -40,27 +48,54 @@ def main():
     logger = create_logger(args.path_helper['log_path'])
     logger.info(args)
 
-    '''segmentation data'''
-    transform_train = transforms.Compose([
-        transforms.Resize((args.image_size, args.image_size)),
-        transforms.ToTensor()
-    ])
-    transform_test = transforms.Compose([
+    OTU_transforms = transforms.Compose([
         transforms.Resize((args.image_size, args.image_size)),
         transforms.ToTensor()
     ])
 
+    main_transforms = transforms.Compose([
+        transforms.Resize((args.image_size, args.image_size)),
+        transforms.ToTensor()
+    ])
+
+    OTU_datapath = './OTU_2d'
+    main_datapath = './Preliminary-data'
+
+    OTU_dataset = OTU_2D(args, OTU_datapath, transform=OTU_transforms)
+    train_size = int(0.8 * len(OTU_dataset))
+    val_size = len(OTU_dataset) - train_size
+    train_OTU, val_OTU = random_split(OTU_dataset, [train_size, val_size])
+
+    #Splitting the main dataset:
+    all_video_dirs = get_video_dir(main_datapath)
+    random.seed(42)
+    random.shuffle(all_video_dirs)
+
+    #print(len(all_video_dirs))
+    num_train = int(0.8 * len(all_video_dirs))
+    train_video_dirs = all_video_dirs[:num_train]
+    val_video_dirs = all_video_dirs[num_train:]
+
+    train_main = MainDataset(args, data_path=main_datapath, transforms_img=main_transforms, transform_mask=main_transforms,
+                                mode='training', prompt='click')
+    train_main.data = [(os.path.join(video_dir, 'frame.png'), os.path.join(video_dir, 'background.png')) 
+                          for video_dir in train_video_dirs]
+    val_main = MainDataset(args, data_path=main_datapath, transforms_img=main_transforms, transform_mask=main_transforms)
+    val_main.data = [(os.path.join(video_dir, 'frame.png'), os.path.join(video_dir, 'background.png')) 
+                          for video_dir in val_video_dirs]
     
-    #Example on the OTU dataset:
-    if args.dataset == 'OTU':
-        full_dataset = OTU_2D(args, args.data_path, transform=transform_train)
-        #80% training 20% validation
-        train_size = int(0.8 * len(full_dataset))
-        val_size = len(full_dataset) - train_size
-        train_dataset, val_dataset = random_split(full_dataset, [train_size, val_size])
+    #print('The len of the main train dataset is: ', len(train_main))
+    #print('The len of the main val dataset is: ', len(val_main))
 
-        train_loader = DataLoader(train_dataset, batch_size=args.b, shuffle=True, num_workers=2, pin_memory=True)
-        test_loader = DataLoader(val_dataset, batch_size=args.b, shuffle=False, num_workers=2, pin_memory=True)
+    train_dataset = ConcatDataset([train_OTU, train_main])
+    val_dataset = ConcatDataset([val_OTU, val_main])
+   
+    print('The len of the full dataset is: ', len(train_dataset) + len(val_dataset))
+    print('The len of the train dataset is: ', len(train_dataset))
+    print('The len of the val dataset is: ', len(val_dataset))
+    
+    train_loader = DataLoader(train_dataset, batch_size=args.b, shuffle=True, num_workers=2, pin_memory=True)
+    test_loader = DataLoader(val_dataset, batch_size=args.b, shuffle=False, num_workers=2, pin_memory=True)
 
     '''checkpoint path and tensorboard'''
     checkpoint_path = os.path.join(settings.CHECKPOINT_PATH, args.net, settings.TIME_NOW)

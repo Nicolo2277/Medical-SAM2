@@ -39,11 +39,8 @@ class OTU_2D(Dataset):
         mask = Image.open(mask_path).convert('L')
 
         if self.transform:
-            state = torch.get_rng_state() #This is to ensure that, if we are applying random transformation, the same is applied to the image and mask
             img = self.transform(img)
             mask = self.transform(mask)
-            torch.set_rng_state(state)
-
         else:
             mask = torch.as_tensor(np.array(mask), dtype=torch.float32)
         
