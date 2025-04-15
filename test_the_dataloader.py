@@ -47,8 +47,7 @@ def test_loader(data_dir):
 
     print(f"Found {len(dataset)} valid frame-mask pairs.")
 
-    # Display up to 5 samples from the dataset.
-    num_samples = min(5, len(dataset))
+    num_samples = 1
     plt.figure(figsize=(12, 4 * num_samples))
 
     for i in range(num_samples):
@@ -58,6 +57,12 @@ def test_loader(data_dir):
         frame = sample['image']
         mask_ori = sample['mask_ori']
         mask_resized = sample['mask']
+        meta = sample['image_meta_dict']
+
+        print(f'Sample {i}')
+        print('Frame path: ', meta['frame_path'])
+        print('Mask path: ', meta['mask_path'])
+        print('Fan path: ', meta['fan_path'])
 
         # Convert tensors to numpy arrays.
         frame_np = frame.permute(1, 2, 0).numpy()

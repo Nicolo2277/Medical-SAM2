@@ -1,5 +1,4 @@
 '''Data loader for the main dataset for pretraining on binary segmentation'''
-
 import os
 import numpy as np
 from PIL import Image
@@ -16,13 +15,16 @@ def invert_mask(background_mask_tensor):
 
 def apply_fan(fan, mask, image):
         '''Apply fan cropping to both masks and images'''
-        # Convert fan image to a numpy array and create a binary mask.
+
         fan_np = np.array(fan)
-        threshold = 128  
+        threshold = 0
         binary_fan = fan_np > threshold  #True for pixels inside the fan
 
         # Get indices where binary_fan is True
         coords = np.column_stack(np.where(binary_fan))
+        #print('image size:', fan.size)  # (608, 448)
+        #print('Coords size: ', coords.size)  #(495118)
+
         if coords.size > 0:
             # Compute the bounding box of the fan region.
             y_min, x_min = coords.min(axis=0)
@@ -31,6 +33,7 @@ def apply_fan(fan, mask, image):
             crop_box = (x_min, y_min, x_max, y_max)
             image = image.crop(crop_box)
             mask = mask.crop(crop_box)
+
         return image, mask
 
 class MainDataset(Dataset):
@@ -106,7 +109,10 @@ class MainDataset(Dataset):
 
         filename = os.path.basename(frame_path)
 
-        image_meta_dict = {'filename_or_obj':filename}
+        image_meta_dict = {'filename_or_obj':filename,
+                           'frame_path': frame_path,
+                           'mask_path': mask_path,
+                           'fan_path': fan_path}
         return {
             'image': frame,
             'p_label': point_label,
