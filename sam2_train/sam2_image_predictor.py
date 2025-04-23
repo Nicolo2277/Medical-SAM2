@@ -57,9 +57,9 @@ class SAM2ImagePredictor:
 
         # Spatial dim for backbone feature maps
         self._bb_feat_sizes = [
-            (256, 256),
-            (128, 128),
             (64, 64),
+            (32, 32),
+            (16, 16),
         ]
 
     @torch.no_grad()
