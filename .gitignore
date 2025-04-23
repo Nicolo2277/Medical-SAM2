@@ -165,4 +165,5 @@ Preliminary-data/
 OTU_2d/
 logs/
 runs/
+test/
 *.pt
