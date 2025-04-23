@@ -38,6 +38,27 @@ def main():
 
     net = get_network(args, args.net, use_gpu=args.gpu, gpu_device=GPUdevice, distribution=args.distributed)
 
+    '''
+    print(">>> Model parameters and trainability:")
+    total_params = 0
+    trainable_params = 0
+
+    for name, param in net.named_parameters():
+        num = param.numel()
+        total_params += num
+        if param.requires_grad:
+            trainable_params += num
+
+        # cast shape to string so width specifiers work
+        shape_str = str(tuple(param.shape))
+        print(f"{name:40} | shape: {shape_str:20} | trainable: {param.requires_grad}")
+
+    print(f"\nTotal parameters: {total_params:,}")
+    print(f"Trainable parameters: {trainable_params:,}")
+    print(f"Non-trainable parameters: {total_params - trainable_params:,}")
+    print(">>> End of parameter list")
+    '''
+
     #optimization
     optimizer = optim.Adam(net.parameters(), lr=args.lr, betas=(0.9, 0.999), eps=1e-08, weight_decay=0, amsgrad=False)
     #scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.5)
