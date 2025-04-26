@@ -10,6 +10,7 @@ import cfg
 from conf import settings
 from func_2d.utils import *
 import pandas as pd
+import wandb
 
 
 args = cfg.parse_args()
@@ -22,7 +23,7 @@ mask_type = torch.float32
 torch.backends.cudnn.benchmark = True
 
 
-def train_sam(args, net: nn.Module, optimizer, train_loader, epoch, writer):
+def train_sam(args, net: nn.Module, optimizer, train_loader, epoch):
     
     # use bfloat16 for the entire notebook
     torch.autocast(device_type="cuda", dtype=torch.bfloat16).__enter__()
@@ -245,11 +246,21 @@ def train_sam(args, net: nn.Module, optimizer, train_loader, epoch, writer):
             epoch_loss += loss.item()
 
             loss.backward()
+
+            wandb.log({
+            "train/loss_batch": loss.item(),
+            "train/learning_rate": optimizer.param_groups[0]["lr"],
+            # you can add more, e.g. memory_bank_size = len(memory_bank_list)
+            }, step=epoch * len(train_loader) + ind)
+            
             optimizer.step()
             
             optimizer.zero_grad()
 
             pbar.update()
+
+    avg_loss = epoch_loss / len(train_loader)
+    wandb.log({"train/loss_epoch": avg_loss}, step=epoch)
 
     return epoch_loss/len(train_loader)
 
@@ -457,8 +468,16 @@ def validation_sam(args, val_loader, epoch, net: nn.Module, clean_dir=True):
                         img_name = na
                         namecat = namecat + img_name + '+'
                     vis_image(imgs,pred, masks, os.path.join(args.path_helper['sample_path'], namecat+'epoch+' +str(epoch) + '.jpg'), reverse=False, points=None)
-                            
+                   
             pbar.update()
+
+    val_loss = total_loss / n_val
+    mean_eiou, mean_dice = (total_eiou / n_val, total_dice / n_val)
+    wandb.log({
+        "val/loss": val_loss,
+        "val/EIoU": mean_eiou,
+        "val/Dice": mean_dice
+    }, step=epoch)
 
     return total_loss/ n_val , tuple([total_eiou/n_val, total_dice/n_val])
 

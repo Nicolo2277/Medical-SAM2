@@ -166,4 +166,5 @@ OTU_2d/
 logs/
 runs/
 test/
+wandb/
 *.pt

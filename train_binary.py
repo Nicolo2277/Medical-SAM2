@@ -5,7 +5,8 @@ import random
 import torch
 import torch.optim as optim
 import torchvision.transforms as transforms
-from tensorboardX import SummaryWriter
+#from tensorboardX import SummaryWriter
+import wandb
 #from dataset import *
 from torch.utils.data import DataLoader, random_split, ConcatDataset
 
@@ -35,6 +36,13 @@ def main():
 
     args = cfg.parse_args()
     GPUdevice = torch.device('cuda', args.gpu_device)
+
+    # initialize wandb run
+    wandb.init(
+        project="MedSAM-2",
+        name='Binary Mask Segmentation',
+        config=dict(vars(args))  # logs all your args as hyperparameters
+        )
 
     net = get_network(args, args.net, use_gpu=args.gpu, gpu_device=GPUdevice, distribution=args.distributed)
 
@@ -116,14 +124,16 @@ def main():
     train_loader = DataLoader(train_dataset, batch_size=args.b, shuffle=True, num_workers=2, pin_memory=True)
     test_loader = DataLoader(val_dataset, batch_size=args.b, shuffle=False, num_workers=2, pin_memory=True)
 
-    '''checkpoint path and tensorboard'''
+    '''checkpoint path'''
     checkpoint_path = os.path.join(settings.CHECKPOINT_PATH, args.net, settings.TIME_NOW)
+    '''
     #use tensorboard
     if not os.path.exists(settings.LOG_DIR):
         os.mkdir(settings.LOG_DIR)
     writer = SummaryWriter(log_dir=os.path.join(
         settings.LOG_DIR, args.net, settings.TIME_NOW
     ))
+    '''
     #create checkpoint folder to save the model:
     if not os.path.exists(checkpoint_path):
         os.makedirs(checkpoint_path, exist_ok=True)
@@ -135,13 +145,13 @@ def main():
 
     for epoch in range(settings.EPOCH):
         if epoch == 0:
-            tol, (eiou, edice) = function.validation_sam(args, test_loader, epoch, net, writer)
+            tol, (eiou, edice) = function.validation_sam(args, test_loader, epoch, net)
             logger.info(f'Total score: {tol}, IoU: {eiou}, DICE: {edice} || @ epoch {epoch}.')
         
         #training
         net.train()
         time_start = time.time()
-        loss = function.train_sam(args, net, optimizer, train_loader, epoch, writer)
+        loss = function.train_sam(args, net, optimizer, train_loader, epoch)
         logger.info(f'Training loss: {loss} || @ epoch {epoch}.')
         time_end = time.time()
         print('time_for_training ', time_end - time_start)
@@ -149,7 +159,7 @@ def main():
         #validation
         net.eval()
         if epoch % args.val_freq == 0 or epoch == settings.EPOCH-1:
-            tol, (eiou, edice) = function.validation_sam(args, test_loader, epoch, net, writer)
+            tol, (eiou, edice) = function.validation_sam(args, test_loader, epoch, net)
             logger.info(f'Total score: {tol}, IOU: {eiou}, DICE: {edice} || @ epoch {epoch}.')
 
             if edice > best_dice:
@@ -157,7 +167,7 @@ def main():
                 torch.save({'model': net.state_dict(), 'parameter': net._parameters}, os.path.join(args.path_helper['ckpt_path'], 'latest_epoch.pth'))
 
 
-    writer.close()
+    wandb.finish()
 
 
 if __name__ == '__main__':
