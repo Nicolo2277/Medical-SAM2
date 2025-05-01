@@ -250,7 +250,7 @@ def train_sam(args, net: nn.Module, optimizer, train_loader, epoch):
             wandb.log({
             "train/loss_batch": loss.item(),
             "train/learning_rate": optimizer.param_groups[0]["lr"],
-            # you can add more, e.g. memory_bank_size = len(memory_bank_list)
+            # can add also memory_bank_size = len(memory_bank_list)
             }, step=epoch * len(train_loader) + ind)
             
             optimizer.step()

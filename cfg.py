@@ -27,6 +27,8 @@ def parse_args():
     parser.add_argument('-multimask_output', type=int, default=1 , help='the number of masks output for multi-class segmentation')
     parser.add_argument('-memory_bank_size', type=int, default=16, help='sam 2d memory bank size')
     parser.add_argument('-has_prompt', type=bool, default=False, help='wheter or not a prompt is passed in inference')
+    parser.add_argument('-random_seed', type=int, default=42)
+    parser.add_argument('-num_folds', type=int, default=5, help='number of folds')
     parser.add_argument(
     '-data_path',
     type=str,

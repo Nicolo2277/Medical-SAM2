@@ -167,4 +167,5 @@ logs/
 runs/
 test/
 wandb/
+Folds/
 *.pt
