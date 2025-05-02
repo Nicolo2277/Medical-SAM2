@@ -87,3 +87,32 @@ def _load_checkpoint(model, ckpt_path):
             logging.error(unexpected_keys)
             raise RuntimeError()
         logging.info("Loaded checkpoint sucessfully")
+
+'''
+def _load_checkpoint(model, ckpt_path):
+    if ckpt_path is not None:
+        # 1) Load the full state dict from checkpoint
+        ckpt = torch.load(ckpt_path, map_location="cpu")["model"]
+
+        # 2) Strip out all mask_downsampler weights (they expect 1→something channels)
+        for key in list(ckpt.keys()):
+            if key.startswith("memory_encoder.mask_downsampler"):
+                ckpt.pop(key)
+
+        # 3) Load remaining weights non-strictly (our new downsampler will be freshly initialized)
+        missing_keys, unexpected_keys = model.load_state_dict(ckpt, strict=False)
+
+        # 4) (Optional) report what was skipped
+        if missing_keys:
+            logging.warning("Missing keys when loading checkpoint (new downsampler):")
+            for k in missing_keys:
+                if k.startswith("memory_encoder.mask_downsampler"):
+                    continue
+                logging.warning(f"  {k}")
+        if unexpected_keys:
+            logging.warning("Unexpected keys in checkpoint:")
+            for k in unexpected_keys:
+                logging.warning(f"  {k}")
+
+        logging.info("Loaded checkpoint (downsampler re-initialized) successfully")
+'''

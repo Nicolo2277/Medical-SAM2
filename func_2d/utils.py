@@ -387,16 +387,18 @@ def eval_seg(pred,true_mask_p,threshold):
     elif c > 2: # for multi-class segmentation > 2 classes
         ious = [0] * c
         dices = [0] * c
+        pred_t = pred if isinstance(pred, torch.Tensor) \
+            else torch.from_numpy(pred)
         for th in threshold:
             gt_vmask_p = (true_mask_p > th).float()
-            vpred = (pred > th).float()
+            vpred = (pred_t > th).float()
             vpred_cpu = vpred.cpu()
             for i in range(0, c):
-                pred = vpred_cpu[:,i,:,:].numpy().astype('int32')
+                pred_i = vpred_cpu[:,i,:,:].numpy().astype('int32')
                 mask = gt_vmask_p[:,i,:,:].squeeze(1).cpu().numpy().astype('int32')
         
                 '''iou for numpy'''
-                ious[i] += iou(pred,mask)
+                ious[i] += iou(pred_i,mask)
 
                 '''dice for torch'''
                 dices[i] += dice_coeff(vpred[:,i,:,:], gt_vmask_p[:,i,:,:]).item()

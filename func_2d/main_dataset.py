@@ -102,6 +102,9 @@ class MainDataset(Dataset):
 
             point_label, pt = random_click(mask_array, point_label=1)
 
+            #print('point label. ', point_label)  1
+            #print('pt: ', pt)  [a, b]
+
             mask_ori = (mask >= 0.5).float()  # binarize if needed
             mask_resized = F.interpolate(mask_ori.unsqueeze(0), size=(self.mask_size, self.mask_size),
                                          mode='bilinear', align_corners=False).mean(dim=0)
@@ -114,6 +117,7 @@ class MainDataset(Dataset):
                            #'mask_path': mask_path,
                            #'fan_path': fan_path
                            }
+        #print(mask_resized.shape) #torch.Size([1, 256, 256])
         return {
             'image': frame,
             'p_label': point_label,

@@ -17,7 +17,7 @@ args = cfg.parse_args()
 
 GPUdevice = torch.device('cuda', args.gpu_device)
 pos_weight = torch.ones([1]).cuda(device=GPUdevice)*2
-criterion_G = torch.nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+criterion_G = torch.nn.CrossEntropyLoss()
 mask_type = torch.float32
 
 torch.backends.cudnn.benchmark = True
@@ -59,15 +59,25 @@ def train_sam(args, net: nn.Module, optimizer, train_loader, epoch):
 
             # click prompt: unsqueeze to indicate only one click, add more click across this dimension
             if 'pt' in pack:
-                pt_temp = pack['pt'].to(device = GPUdevice)
-                pt = pt_temp.unsqueeze(1)
-                point_labels_temp = pack['p_label'].to(device = GPUdevice)
-                point_labels = point_labels_temp.unsqueeze(1)
-                coords_torch = torch.as_tensor(pt, dtype=torch.float, device=GPUdevice)
-                labels_torch = torch.as_tensor(point_labels, dtype=torch.int, device=GPUdevice)
+                pt_temp = pack['pt'].to(device=GPUdevice)          # shape: (B, 2) or (B, N, 2)
+                pl_temp = pack['p_label'].to(device=GPUdevice)     # shape: (B,) or (B, N)
+
+                # ── Only unsqueeze binary case to make it (B, 1, 2)/(B, 1) ──
+                if pt_temp.ndim == 2:
+                    # Binary segmentation: one click per image
+                    pt = pt_temp.unsqueeze(1)          # now (B, 1, 2)
+                    point_labels = pl_temp.unsqueeze(1) # now (B, 1)
+                else:
+                    # Multiclass: already one click per class, shape (B, N, 2)/(B, N)
+                    pt = pt_temp                        # keep (B, N, 2)
+                    point_labels = pl_temp             # keep (B, N)
+
+                coords_torch = pt.to(dtype=torch.float, device=GPUdevice)   # (B, M, 2)
+                labels_torch = point_labels.to(dtype=torch.int, device=GPUdevice)  # (B, M)
             else:
                 coords_torch = None
                 labels_torch = None
+
 
             '''Train image encoder'''                    
             backbone_out = net.forward_image(imgs)
@@ -165,7 +175,7 @@ def train_sam(args, net: nn.Module, optimizer, train_loader, epoch):
                     image_pe=net.sam_prompt_encoder.get_dense_pe(), 
                     sparse_prompt_embeddings=se,
                     dense_prompt_embeddings=de, 
-                    multimask_output=False, # args.multimask_output if you want multiple masks
+                    multimask_output=True, # args.multimask_output if you want multiple masks
                     repeat_image=False,  # the image is already batched
                     high_res_features = high_res_feats
                 )
@@ -180,6 +190,9 @@ def train_sam(args, net: nn.Module, optimizer, train_loader, epoch):
             pred = F.interpolate(low_res_multimasks,size=(args.out_size,args.out_size))
             high_res_multimasks = F.interpolate(low_res_multimasks, size=(args.image_size, args.image_size),
                                                 mode="bilinear", align_corners=False)
+            
+            #print(masks.shape)  #torch.Size([4, 1, 256, 256])          
+
             
 
             '''memory encoder'''       
@@ -241,7 +254,9 @@ def train_sam(args, net: nn.Module, optimizer, train_loader, epoch):
                                                      image_embed[batch].reshape(-1).detach()])
 
             # backpropagation
-            loss = lossfunc(pred, masks)
+            #print(pred.shape)torch.Size([4, 1, 256, 256])
+            #print(masks.shape) #torch.Size([4, 256, 256])
+            loss = lossfunc(pred, masks.to(dtype=torch.long))
             pbar.set_postfix(**{'loss (batch)': loss.item()})
             epoch_loss += loss.item()
 
@@ -306,17 +321,27 @@ def validation_sam(args, val_loader, epoch, net: nn.Module, clean_dir=True):
 
             
             if 'pt' in pack:
-                #print(pack['pt'].shape) #torch.Size([4, 2])
-                pt_temp = pack['pt'].to(device = GPUdevice)
-                pt = pt_temp.unsqueeze(1)
-                point_labels_temp = pack['p_label'].to(device = GPUdevice)
-                point_labels = point_labels_temp.unsqueeze(1)
-                coords_torch = torch.as_tensor(pt, dtype=torch.float, device=GPUdevice)
-                labels_torch = torch.as_tensor(point_labels, dtype=torch.int, device=GPUdevice)
+                pt_temp = pack['pt'].to(device=GPUdevice)          # shape: (B, 2) or (B, N, 2)
+                pl_temp = pack['p_label'].to(device=GPUdevice)     # shape: (B,) or (B, N)
+
+                # ── Only unsqueeze binary case to make it (B, 1, 2)/(B, 1) ──
+                if pt_temp.ndim == 2:
+                    # Binary segmentation: one click per image
+                    pt = pt_temp.unsqueeze(1)          # now (B, 1, 2)
+                    point_labels = pl_temp.unsqueeze(1) # now (B, 1)
+                else:
+                    # Multiclass: already one click per class, shape (B, N, 2)/(B, N)
+                    pt = pt_temp                        # keep (B, N, 2)
+                    point_labels = pl_temp             # keep (B, N)
+
+                coords_torch = pt.to(dtype=torch.float, device=GPUdevice)   # (B, M, 2)
+                labels_torch = point_labels.to(dtype=torch.int, device=GPUdevice)  # (B, M)
             else:
                 coords_torch = None
                 labels_torch = None
 
+            #print("coords_torch.shape:", coords_torch.shape,
+                #"labels_torch.shape:", labels_torch.shape)
 
 
             '''test'''
@@ -380,13 +405,13 @@ def validation_sam(args, val_loader, epoch, net: nn.Module, clean_dir=True):
                 if (ind%5) == 0:
                     flag = True
                     points = (coords_torch, labels_torch)
-                    #print(points[0].shape) #torch.Size([4, 1, 2])
-                    #print(points[1].shape) #torch.Size([4, 1])
 
                 else:
                     flag = False
                     points = None
 
+                #print(points[0].shape) #torch.Size([4, 1, 2, 2])
+                #print(points[1].shape) #torch.Size([4, 1, 2])
                 se, de = net.sam_prompt_encoder(
                     points=points, 
                     boxes=None,
@@ -399,17 +424,19 @@ def validation_sam(args, val_loader, epoch, net: nn.Module, clean_dir=True):
                     image_pe=net.sam_prompt_encoder.get_dense_pe(), 
                     sparse_prompt_embeddings=se,
                     dense_prompt_embeddings=de, 
-                    multimask_output=False, 
+                    multimask_output=True, 
                     repeat_image=False,  
                     high_res_features = high_res_feats
                 )
 
                 # prediction
+                #print(low_res_multimasks.shape) #torch.Size([4, 3, 64, 64])
+
                 pred = F.interpolate(low_res_multimasks,size=(args.out_size,args.out_size))
                 high_res_multimasks = F.interpolate(low_res_multimasks, size=(args.image_size, args.image_size),
                                                 mode="bilinear", align_corners=False)
                 
-                #print(masks.shape)  #torch.Size([4, 1, 256, 256])          
+            
                 """ memory encoder """
                 maskmem_features, maskmem_pos_enc = net._encode_new_memory( 
                     current_vision_feats=vision_feats,
@@ -458,22 +485,29 @@ def validation_sam(args, val_loader, epoch, net: nn.Module, clean_dir=True):
                                                          iou_predictions[batch, 0],
                                                          image_embed[batch].reshape(-1).detach()])
 
-                # binary mask and calculate loss, iou, 
-                print(masks.shape)
-                total_loss += lossfunc(pred, masks)
-                pred = (pred> 0.5).float()
-                temp = eval_seg(pred, masks, threshold)
-                total_eiou += temp[0]
-                total_dice += temp[1]
+                # binary mask and calculate loss, iou, dice
+                total_loss += lossfunc(pred, masks.to(dtype=torch.long))                
+                
+                # assume masks.shape is [B, 1, H, W] or [B, H, W], with values 0..C-1
+                masks_int = masks.squeeze(1).long()                      # -> [B, H, W]
+                gt_onehot = F.one_hot(masks_int, num_classes=3)          # -> [B, H, W, C]
+                gt_onehot = gt_onehot.permute(0, 3, 1, 2).float()         # -> [B, C, H, W]
+                # now call eval_seg with the one-hot tensor
+                #temp = eval_seg(pred, gt_onehot, threshold)
 
-                '''vis images'''
+
+                #total_eiou += temp[0]
+                #total_dice += temp[1]
+                
+                #'''vis images'''
+                '''
                 if ind % args.vis == 0:
                     namecat = 'Test'
                     for na in name:
                         img_name = na
                         namecat = namecat + img_name + '+'
                     vis_image(imgs,pred, masks, os.path.join(args.path_helper['sample_path'], namecat+'epoch+' +str(epoch) + '.jpg'), reverse=False, points=None)
-                   
+                   '''
             pbar.update()
 
     val_loss = total_loss / n_val

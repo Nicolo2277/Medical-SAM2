@@ -1,97 +1,136 @@
 import os
-from torchvision import transforms
-import argparse
-from argparse import Namespace
-from func_2d.main_dataset import *
+import numpy as np
 import matplotlib.pyplot as plt
+from types import SimpleNamespace as Namespace
+import torchvision.transforms as T
+import torch
 
+from func_2d.multiclass_dataset import MainDataset  
 
-'''
-data_path = './Preliminary-data'
-i=0
-for f in os.scandir(data_path):
-    if f.is_dir():
-        #print("Folder:", f.name, "Path:", f.path)
-        for g in os.scandir(f.path):
-            if g.is_dir():
-                #print("Subfolder:", g.name, "Path:", g.path)
-                name = g.path.split('/')[-1]
-                for n in os.scandir(g.path):
-                    if n.is_dir():
-                        image_count = sum(1 for entry in os.scandir(n.path) if entry.is_file())
-                        if image_count > 1:
-                            i += 1
-print(i)
-'''
+# ----------------------------------------------------------------------------
+# Utility: RGB overlay of multiclass mask
+# ----------------------------------------------------------------------------
+def to_rgb_mask(m):
+    cmap = {0:(0,0,0), 1:(1,0,0), 2:(0,0,1)}
+    h, w = m.shape
+    rgb = np.zeros((h, w, 3), dtype=float)
+    for cls, col in cmap.items():
+        rgb[m==cls] = col
+    return rgb
 
-#to test the dataloader
+# ----------------------------------------------------------------------------
+# Visualization of dataset samples
+# ----------------------------------------------------------------------------
 def test_loader(data_dir):
-    # Create a dummy args namespace with necessary attributes.
-    args = Namespace(image_size=256, out_size=256)  # Change out_size as needed
+    # 1) dummy args
+    args = Namespace(image_size=256, out_size=256)
 
-    # Define sample transformations for the image and mask.
-    transform_img = transforms.Compose([
-        transforms.Resize((args.image_size, args.image_size)),
-        transforms.ToTensor()
-    ])
-    transform_mask = transforms.Compose([
-        transforms.Resize((args.out_size, args.out_size)),
-        transforms.ToTensor()
+    # 2) image transforms: resize then tensor
+    transform_img = T.Compose([
+        T.Resize((args.image_size, args.image_size)),
+        T.ToTensor()
     ])
 
-    # Initialize the dataset. Make sure your dataset folder is correctly formatted.
-    dataset = MainDataset(args, data_dir, transforms_img=transform_img, transform_mask=transform_mask, prompt='click')
-    if len(dataset) == 0:
-        print("No valid frame-mask pairs found.")
+    # 3) init dataset
+    dataset = MainDataset(
+        args,
+        data_dir,
+        transforms_img=transform_img,
+    )
+    n = len(dataset)
+    if n == 0:
+        print("❌ No valid samples found in:", data_dir)
         return
+    print(f"✅ Found {n} samples in {data_dir}\n")
 
-    print(f"Found {len(dataset)} valid frame-mask pairs.")
+    # 4) iterate and visualize
+    for idx in range(min(n, 5)):  # show up to 5 samples
+        sample = dataset[idx]
+        frame        = sample['image']        # 3×H×W
+        mask_ori     = sample['mask_ori'].squeeze(0)     # H×W LongTensor
+        mask_resized = sample['mask'].squeeze(0)         # H_out×W_out LongTensor
+        p_label      = sample.get('p_label')  # Tensor or None
+        pt           = sample.get('pt')       # Tensor([y, x]×N) or None
+        meta         = sample['image_meta_dict']
 
-    num_samples = 1
-    plt.figure(figsize=(12, 4 * num_samples))
+        # 5) class presence
+        print(f"Sample {idx}: {meta['filename_or_obj']}")
+        print("  - Original mask classes: ", torch.unique(mask_ori).tolist())
+        print("  - Resized mask classes:  ", torch.unique(mask_resized).tolist(), "\n")
 
-    for i in range(num_samples):
-        sample = dataset[i]
+        # 6) convert to numpy
+        frame_np        = frame.permute(1,2,0).cpu().numpy()
+        mask_ori_np     = mask_ori.cpu().numpy()
+        mask_resized_np = mask_resized.cpu().numpy()
 
-        # Extract tensors.
-        frame = sample['image']
-        mask_ori = sample['mask_ori']
-        mask_resized = sample['mask']
-        meta = sample['image_meta_dict']
+        # 7) plot
+        fig, axes = plt.subplots(2, 3, figsize=(15,10))
+        fig.suptitle(f"Sample {idx}: {meta['filename_or_obj']}", fontsize=16)
 
-        #print(f'Sample {i}')
-        #print('Frame path: ', meta['frame_path'])
-        #print('Mask path: ', meta['mask_path'])
-        #print('Fan path: ', meta['fan_path'])
+        # A) frame + clicks
+        ax = axes[0,0]
+        ax.imshow(frame_np)
+        ax.set_title("Frame + clicks")
+        if pt is not None and p_label is not None:
+            pts = pt.cpu().numpy()
+            lbls = p_label.cpu().numpy()
+            # ensure arrays
+            if pts.ndim == 1:
+                pts = np.expand_dims(pts, 0)
+                lbls = np.expand_dims(lbls, 0)
+            h_img, w_img, _ = frame_np.shape
+            h_m, w_m = mask_resized_np.shape
+            y_scale = h_img / h_m
+            x_scale = w_img / w_m
+            # iterate points
+            for i in range(pts.shape[0]):
+                print(pts.shape) #(2, 2)
+                y, x = pts[i]
+                cls = lbls[i]
+                #print('classe: ', cls)
+                if y < 0 or x < 0:
+                    continue
+                color = 'red' if cls==1 else ('blue' if cls==2 else 'yellow')
+                ax.plot(
+                    x * x_scale,
+                    y * y_scale,
+                    'o', markeredgecolor='black',
+                    markerfacecolor=color,
+                    markersize=12,
+                    label=f"class {cls}"
+                )
+            ax.legend(loc='upper right')
+        ax.axis("off")
 
-        # Convert tensors to numpy arrays.
-        frame_np = frame.permute(1, 2, 0).numpy()
-        mask_ori_np = mask_ori.squeeze().numpy()
-        mask_resized_np = mask_resized.squeeze().numpy()
+        # B) original multiclass mask
+        axes[0,1].imshow(to_rgb_mask(mask_ori_np))
+        axes[0,1].set_title("mask_ori (multiclass)")
+        axes[0,1].axis("off")
 
-        # Create a subplot for this sample with three columns:
-        # Original frame, original binary mask, and resized mask.
-        ax1 = plt.subplot(num_samples, 3, i * 3 + 1)
-        ax1.imshow(frame_np)
-        ax1.set_title(f"Frame {i}\n{sample['image_meta_dict']['filename_or_obj']}")
-        ax1.axis("off")
+        # C) resized multiclass mask
+        axes[0,2].imshow(to_rgb_mask(mask_resized_np))
+        axes[0,2].set_title("mask_resized (multiclass)")
+        axes[0,2].axis("off")
 
-        ax2 = plt.subplot(num_samples, 3, i * 3 + 2)
-        ax2.imshow(mask_ori_np, cmap="gray")
-        ax2.set_title(f"mask_ori {i}")
-        ax2.axis("off")
+        # D) solid overlay
+        axes[1,0].imshow(frame_np, alpha=0.7)
+        axes[1,0].imshow((mask_resized_np==1), cmap="Reds", alpha=0.5)
+        axes[1,0].set_title("Solid (class 1)")
+        axes[1,0].axis("off")
 
-        ax3 = plt.subplot(num_samples, 3, i * 3 + 3)
-        ax3.imshow(mask_resized_np, cmap="gray")
-        ax3.set_title(f"mask_resized {i}")
-        ax3.axis("off")
+        # E) nonsolid overlay
+        axes[1,1].imshow(frame_np, alpha=0.7)
+        axes[1,1].imshow((mask_resized_np==2), cmap="Blues", alpha=0.5)
+        axes[1,1].set_title("Non-solid (class 2)")
+        axes[1,1].axis("off")
 
-    plt.tight_layout()
-    plt.show()
+        # F) combined check
+        axes[1,2].imshow(to_rgb_mask(mask_resized_np))
+        axes[1,2].set_title("Combined check")
+        axes[1,2].axis("off")
+
+        plt.tight_layout(rect=[0,0,1,0.96])
+        plt.show()
 
 if __name__ == "__main__":
-    data_dir = './Preliminary-data'
-
-    test_loader(data_dir)
-
-
+    test_loader("./Preliminary-data")
