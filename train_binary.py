@@ -46,6 +46,7 @@ def main():
     
     random.seed(args.random_seed)
     for fold in range(args.num_folds):
+        print('Starting training for fold number ', fold)
         net = get_network(args, args.net, use_gpu=args.gpu, gpu_device=GPUdevice, distribution=args.distributed)
 
         '''

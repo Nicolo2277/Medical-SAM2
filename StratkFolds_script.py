@@ -14,15 +14,29 @@ def gather_annotated_frames(input_root: Path) -> pd.DataFrame:
     """
     records = []
     for dirpath, _, filenames in os.walk(input_root):
+        count = 0
         files = {f.lower() for f in filenames}
         if 'frame.png' in files and 'background.png' in files:
             dirp = Path(dirpath)
+            a = dirpath.split('/', -1)
+            fan_path = Path(a[0] + '/' + a[1] + '/' + a[2])
             rel = dirp.relative_to(input_root)
-            records.append({
+            if count == 0:
+                records.append({
+                    'clinical_case': rel.parts[0],
+                    'item': rel.as_posix(),
+                    'frame_path': dirp / 'frame.png',
+                    'gt_path':    dirp / 'background.png',
+                    'fan_path': fan_path / 'fan.png'
+                })
+                count += 1
+            else:
+                records.append({
                 'clinical_case': rel.parts[0],
                 'item': rel.as_posix(),
                 'frame_path': dirp / 'frame.png',
                 'gt_path':    dirp / 'background.png'
+
             })
     return pd.DataFrame(records)
 
@@ -107,10 +121,17 @@ def make_stratified_group_folds(
         for split_name, subset in [('train', train_df), ('val', val_df)]:
             tgt = fold_dir / split_name
             for _, row in subset.iterrows():
+                count = 0
                 dest = tgt / row['clinical_case'] / Path(row['item'])
                 dest.mkdir(parents=True, exist_ok=True)
+                
+                a = str(dest).split('/', -1)
+                fan_path = Path(a[0] + '/' + a[1] + '/' + a[2] + '/' + a[3] + '/' + a[4] + '/' + a[5])
+                if 'fan.png' not in os.walk(fan_path):
+                    shutil.copy2(row['fan_path'], fan_path / 'fan.png')
                 shutil.copy2(row['frame_path'], dest / 'frame.png')
                 shutil.copy2(row['gt_path'],    dest / 'background.png')
+
 
 
 if __name__ == '__main__':
