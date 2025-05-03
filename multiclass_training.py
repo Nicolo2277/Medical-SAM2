@@ -148,3 +148,8 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+    '''
+    Change memory encoder by putting 3, 3 instead of 1, 1 in mask input and output
+    Change in build sam how the weights for the decoder are initialized 
+    '''

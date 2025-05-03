@@ -6,7 +6,7 @@ import os
 from datetime import datetime
 
 #For 100 epochs:
-'''
+
 CHECKPOINT_PATH = 'checkpoint'
 
 #total training epoches
@@ -52,3 +52,4 @@ LOG_DIR = 'runs'
 
 #save weights file per SAVE_EPOCH epoch
 SAVE_EPOCH = 10
+'''

@@ -459,7 +459,7 @@ def validation_sam(args, val_loader, epoch, net: nn.Module, clean_dir=True):
                                                          image_embed[batch].reshape(-1).detach()])
 
                 # binary mask and calculate loss, iou, 
-                print(masks.shape)
+                #print(masks.shape) #torch.Size([4, 1, 256, 256])
                 total_loss += lossfunc(pred, masks)
                 pred = (pred> 0.5).float()
                 temp = eval_seg(pred, masks, threshold)

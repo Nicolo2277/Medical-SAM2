@@ -8,7 +8,7 @@ from tqdm import tqdm
 
 import cfg
 from conf import settings
-from func_2d.utils import *
+from func_2d.multiclass_utils import *
 import pandas as pd
 import wandb
 
@@ -256,7 +256,8 @@ def train_sam(args, net: nn.Module, optimizer, train_loader, epoch):
             # backpropagation
             #print(pred.shape)torch.Size([4, 1, 256, 256])
             #print(masks.shape) #torch.Size([4, 256, 256])
-            loss = lossfunc(pred, masks.to(dtype=torch.long))
+            masks_idx = pack['mask_ori'].to(device=GPUdevice, dtype=torch.long)
+            loss = lossfunc(pred, masks_idx)
             pbar.set_postfix(**{'loss (batch)': loss.item()})
             epoch_loss += loss.item()
 
@@ -485,29 +486,30 @@ def validation_sam(args, val_loader, epoch, net: nn.Module, clean_dir=True):
                                                          iou_predictions[batch, 0],
                                                          image_embed[batch].reshape(-1).detach()])
 
+                masks_idx = pack['mask_ori'].to(device=GPUdevice, dtype=torch.long)
                 # binary mask and calculate loss, iou, dice
-                total_loss += lossfunc(pred, masks.to(dtype=torch.long))                
+                total_loss += lossfunc(pred, masks_idx)                
                 
-                # assume masks.shape is [B, 1, H, W] or [B, H, W], with values 0..C-1
-                masks_int = masks.squeeze(1).long()                      # -> [B, H, W]
-                gt_onehot = F.one_hot(masks_int, num_classes=3)          # -> [B, H, W, C]
-                gt_onehot = gt_onehot.permute(0, 3, 1, 2).float()         # -> [B, C, H, W]
-                # now call eval_seg with the one-hot tensor
-                #temp = eval_seg(pred, gt_onehot, threshold)
+                temp = eval_seg(pred, masks, threshold)
 
 
-                #total_eiou += temp[0]
-                #total_dice += temp[1]
+                total_eiou += temp[0]
+                total_dice += temp[1]
                 
-                #'''vis images'''
-                '''
-                if ind % args.vis == 0:
-                    namecat = 'Test'
-                    for na in name:
-                        img_name = na
-                        namecat = namecat + img_name + '+'
-                    vis_image(imgs,pred, masks, os.path.join(args.path_helper['sample_path'], namecat+'epoch+' +str(epoch) + '.jpg'), reverse=False, points=None)
-                   '''
+                '''vis images'''
+                
+                # inside your loop
+                vis_image(
+                    imgs=imgs, 
+                    logits=pred, 
+                    gt_onehot=pack['mask'], 
+                    save_path=f"multiclass_sample/vis_{epoch}_{ind}.png",
+                    mean=[0.485,0.456,0.406],
+                    std =[0.229,0.224,0.225],
+                    max_samples=4
+                )
+
+                   
             pbar.update()
 
     val_loss = total_loss / n_val
