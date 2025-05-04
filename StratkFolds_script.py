@@ -3,6 +3,7 @@ import shutil
 from pathlib import Path
 import pandas as pd
 from sklearn.model_selection import StratifiedGroupKFold
+import matplotlib.pyplot as plt
 
 def gather_annotated_frames(input_root: Path) -> pd.DataFrame:
     """
@@ -115,6 +116,26 @@ def make_stratified_group_folds(
             )
             print(f"{name} hist proportions:\n{dist.to_dict()}")
             print(f"{name} size‐bin proportions:\n{bin_dist.to_dict()}\n")
+
+             #histogram of frame counts per split
+            fc = split_df['clinical_case'].map(frame_counts)
+            plt.figure()
+            fc.hist()
+            plt.title(f"{name} Frame‐Count Distribution (Fold {fold_idx})")
+            plt.xlabel("Frame Count")
+            plt.ylabel("Number of Cases")
+            plt.tight_layout()
+            plt.show()
+
+        # overall std of frame counts per bin across ALL cases
+        std_per_bin = case_df.groupby('count_bin')['frame_count'].std()
+        plt.figure()
+        std_per_bin.plot(kind='bar')
+        plt.title("Std Dev of Frame Counts per Bin (All Cases)")
+        plt.xlabel("Quantile Bin")
+        plt.ylabel("Standard Deviation of Frame Count")
+        plt.tight_layout()
+        plt.show()
 
         # Copy files
         fold_dir = output_root / f'fold_{fold_idx}'

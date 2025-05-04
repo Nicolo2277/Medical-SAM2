@@ -11,6 +11,7 @@ from conf import settings
 from func_2d.utils import *
 import pandas as pd
 import wandb
+from sklearn.metrics import confusion_matrix
 
 
 args = cfg.parse_args()
@@ -479,6 +480,23 @@ def validation_sam(args, val_loader, epoch, net: nn.Module, clean_dir=True):
                 f_measure_lst.append(f_measure)
                 jaccard_lst.append(jaccard)
 
+                gt_flat = masks.argmax(dim=1).view(-1).cpu().numpy()      # [b * h * w]
+
+                pred_flat = pred.argmax(dim=1).view(-1).cpu().numpy()            # [b * h * w]
+
+                # (2) Compute the confusion matrix with sklearn
+                c = 2 #num_classes
+                cm = confusion_matrix(gt_flat, pred_flat, labels=list(range(c)))
+
+                # (3) Log it to W&B
+                wandb.log({
+                    "confusion_matrix": wandb.plot.confusion_matrix(
+                        probs=None,
+                        y_true=gt_flat,
+                        preds=pred_flat,
+                        class_names=[f"class_{i}" for i in range(c)]
+                    )
+                }, step=epoch)
 
                 '''vis images'''
                 if ind % args.vis == 0:
