@@ -289,9 +289,14 @@ def validation_sam(args, val_loader, epoch, net: nn.Module, clean_dir=True):
     lossfunc = criterion_G
     memory_bank_list = []
     feat_sizes = [(64, 64), (32, 32), (16, 16)] #If you change the image dimensions[(256, 256), (128, 128), (64, 64)]
-    total_loss = 0
-    total_eiou = 0
-    total_dice = 0
+    total_loss = 0.0
+    eiou_lst = []
+    dice_lst = []
+    specificity_lst = []
+    precision_lst = []
+    recall_lst = []
+    f_measure_lst = []
+    jaccard_lst = []
 
 
     with tqdm(total=n_val, desc='Validation round', unit='batch', leave=False) as pbar:
@@ -462,9 +467,18 @@ def validation_sam(args, val_loader, epoch, net: nn.Module, clean_dir=True):
                 #print(masks.shape) #torch.Size([4, 1, 256, 256])
                 total_loss += lossfunc(pred, masks)
                 pred = (pred> 0.5).float()
-                temp = eval_seg(pred, masks, threshold)
-                total_eiou += temp[0]
-                total_dice += temp[1]
+                metrics = eval_seg(pred, masks, threshold)
+                dice, specificity, precision, recall, f_measure, jaccard = metrics
+
+                # accumulate
+                
+                dice_lst.append(dice)
+                specificity_lst.append(specificity)
+                precision_lst.append(precision)
+                recall_lst.append(recall)
+                f_measure_lst.append(f_measure)
+                jaccard_lst.append(jaccard)
+
 
                 '''vis images'''
                 if ind % args.vis == 0:
@@ -476,13 +490,33 @@ def validation_sam(args, val_loader, epoch, net: nn.Module, clean_dir=True):
                    
             pbar.update()
 
+     # compute averages
     val_loss = total_loss / n_val
-    mean_eiou, mean_dice = (total_eiou / n_val, total_dice / n_val)
+    mean_dice = sum(dice_lst) / len(dice_lst)
+    mean_specificity = sum(specificity_lst) / len(specificity_lst)
+    mean_precision = sum(precision_lst) / len(precision_lst)
+    mean_recall = sum(recall_lst) / len(recall_lst)
+    mean_f_measure = sum(f_measure_lst) / len(f_measure_lst)
+    mean_jaccard = sum(jaccard_lst) / len(jaccard_lst)
+
+    # log to wandb
     wandb.log({
         "val/loss": val_loss,
-        "val/EIoU": mean_eiou,
-        "val/Dice": mean_dice
+        "val/Dice": mean_dice,
+        "val/Specificity": mean_specificity,
+        "val/Precision": mean_precision,
+        "val/Recall": mean_recall,
+        "val/F1": mean_f_measure,
+        "val/Jaccard": mean_jaccard
     }, step=epoch)
 
-    return total_loss/ n_val , tuple([total_eiou/n_val, total_dice/n_val])
+    return (
+        val_loss,
+        mean_dice,
+        mean_specificity,
+        mean_precision,
+        mean_recall,
+        mean_f_measure,
+        mean_jaccard
+    )
 

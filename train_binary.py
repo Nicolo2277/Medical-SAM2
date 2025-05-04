@@ -140,8 +140,8 @@ def main():
 
         for epoch in range(settings.EPOCH):
             if epoch == 0:
-                tol, (eiou, edice) = function.validation_sam(args, test_loader, epoch, net)
-                logger.info(f'Total score: {tol}, IoU: {eiou}, DICE: {edice} || @ epoch {epoch}.')
+                val_loss, mean_dice, mean_specificity, mean_precision, mean_recall, mean_f_measure, mean_jaccard = function.validation_sam(args, test_loader, epoch, net)
+                logger.info(f'Val loss: {val_loss}, Jaccard: {mean_jaccard}, DICE: {mean_dice} || @ epoch {epoch}.')
             
             #training
             net.train()
@@ -154,11 +154,11 @@ def main():
             #validation
             net.eval()
             if epoch % args.val_freq == 0 or epoch == settings.EPOCH-1:
-                tol, (eiou, edice) = function.validation_sam(args, test_loader, epoch, net)
-                logger.info(f'Total score: {tol}, IOU: {eiou}, DICE: {edice} || @ epoch {epoch}.')
+                val_loss, mean_dice, mean_specificity, mean_precision, mean_recall, mean_f_measure, mean_jaccard = function.validation_sam(args, test_loader, epoch, net)
+                logger.info(f'Val loss: {val_loss}, Jaccard: {mean_jaccard}, DICE: {mean_dice} || @ epoch {epoch}.')
 
-                if edice > best_dice:
-                    best_dice = edice
+                if mean_dice > best_dice:
+                    best_dice = mean_dice
                     torch.save({'model': net.state_dict(), 'parameter': net._parameters}, os.path.join(args.path_helper['ckpt_path'], 'latest_epoch.pth'))
 
 

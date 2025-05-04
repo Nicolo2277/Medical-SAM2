@@ -355,73 +355,69 @@ def vis_image(imgs, pred_masks, gt_masks, save_path, reverse = False, points = N
 
     return
 
-def eval_seg(pred,true_mask_p,threshold):
+def eval_seg(pred: torch.Tensor, true_mask_p: torch.Tensor, threshold=(0.1, 0.3, 0.5, 0.7, 0.9)):
     '''
-    threshold: a int or a tuple of int
-    masks: [b,2,h,w]
-    pred: [b,2,h,w]
+    threshold: int or tuple of ints
+    pred, true_mask_p: [b, c, h, w]
+    Returns:
+        dice_mean, specificity_mean, precision_mean, recall_mean, f_measure_mean, jaccard_mean
     '''
     b, c, h, w = pred.size()
-    if c == 2:
-        iou_d, iou_c, disc_dice, cup_dice = 0,0,0,0
-        for th in threshold:
-
-            gt_vmask_p = (true_mask_p > th).float()
-            vpred = (pred > th).float()
-            vpred_cpu = vpred.cpu()
-            disc_pred = vpred_cpu[:,0,:,:].numpy().astype('int32')
-            cup_pred = vpred_cpu[:,1,:,:].numpy().astype('int32')
-
-            disc_mask = gt_vmask_p [:,0,:,:].squeeze(1).cpu().numpy().astype('int32')
-            cup_mask = gt_vmask_p [:, 1, :, :].squeeze(1).cpu().numpy().astype('int32')
     
-            '''iou for numpy'''
-            iou_d += iou(disc_pred,disc_mask)
-            iou_c += iou(cup_pred,cup_mask)
+    def compute_metrics(bin_pred, bin_true):
+        TP = float((bin_pred & bin_true).sum())
+        TN = float(((1 - bin_pred) & (1 - bin_true)).sum())
+        FP = float((bin_pred & (1 - bin_true)).sum())
+        FN = float(((1 - bin_pred) & bin_true).sum())
+        dice = (2 * TP) / (2 * TP + FP + FN) if (2 * TP + FP + FN) > 0 else 1.0
+        spec = TN / (TN + FP) if (TN + FP) > 0 else 1.0
+        prec = TP / (TP + FP) if (TP + FP) > 0 else 1.0
+        rec = TP / (TP + FN) if (TP + FN) > 0 else 1.0
+        f1 = (2 * prec * rec) / (prec + rec) if (prec + rec) > 0 else 0.0
+        jac = TP / (TP + FP + FN) if (TP + FP + FN) > 0 else 1.0
+        return dice, spec, prec, rec, f1, jac
 
-            '''dice for torch'''
-            disc_dice += dice_coeff(vpred[:,0,:,:], gt_vmask_p[:,0,:,:]).item()
-            cup_dice += dice_coeff(vpred[:,1,:,:], gt_vmask_p[:,1,:,:]).item()
-            
-        return iou_d / len(threshold), iou_c / len(threshold), disc_dice / len(threshold), cup_dice / len(threshold)
-    elif c > 2: # for multi-class segmentation > 2 classes
-        ious = [0] * c
-        dices = [0] * c
-        pred_t = pred if isinstance(pred, torch.Tensor) \
-            else torch.from_numpy(pred)
-        for th in threshold:
-            gt_vmask_p = (true_mask_p > th).float()
-            vpred = (pred_t > th).float()
-            vpred_cpu = vpred.cpu()
-            for i in range(0, c):
-                pred_i = vpred_cpu[:,i,:,:].numpy().astype('int32')
-                mask = gt_vmask_p[:,i,:,:].squeeze(1).cpu().numpy().astype('int32')
-        
-                '''iou for numpy'''
-                ious[i] += iou(pred_i,mask)
+    dice_lst, spec_lst, prec_lst, rec_lst, f1_lst, jac_lst = ([] for _ in range(6))
 
-                '''dice for torch'''
-                dices[i] += dice_coeff(vpred[:,i,:,:], gt_vmask_p[:,i,:,:]).item()
-            
-        return tuple(np.array(ious + dices) / len(threshold)) # tuple has a total number of c * 2
-    else:
-        eiou, edice = 0,0
-        for th in threshold:
+    for th in threshold:
+        bin_pred = (pred > th).float().cpu()
+        bin_true = (true_mask_p > th).float().cpu()
 
-            gt_vmask_p = (true_mask_p > th).float()
-            vpred = (pred > th).float()
-            vpred_cpu = vpred.cpu()
-            disc_pred = vpred_cpu[:,0,:,:].numpy().astype('int32')
+        if c == 1:
+            for i in range(b):
+                p = bin_pred[i, 0].numpy().astype('int32')
+                g = bin_true[i, 0].numpy().astype('int32')
+                metrics = compute_metrics(p, g)
+                for l, m in zip((dice_lst, spec_lst, prec_lst, rec_lst, f1_lst, jac_lst), metrics):
+                    l.append(m)
 
-            disc_mask = gt_vmask_p [:,0,:,:].squeeze(1).cpu().numpy().astype('int32')
-    
-            '''iou for numpy'''
-            eiou += iou(disc_pred,disc_mask)
+        elif c == 2:
+            for i in range(b):
+                for ch in range(2):
+                    p = bin_pred[i, ch].numpy().astype('int32')
+                    g = bin_true[i, ch].numpy().astype('int32')
+                    metrics = compute_metrics(p, g)
+                    for l, m in zip((dice_lst, spec_lst, prec_lst, rec_lst, f1_lst, jac_lst), metrics):
+                        l.append(m)
 
-            '''dice for torch'''
-            edice += dice_coeff(vpred[:,0,:,:], gt_vmask_p[:,0,:,:]).item()
-            
-        return eiou / len(threshold), edice / len(threshold)
+        elif c > 2:
+            for i in range(b):
+                for ch in range(c):
+                    p = bin_pred[i, ch].numpy().astype('int32')
+                    g = bin_true[i, ch].numpy().astype('int32')
+                    metrics = compute_metrics(p, g)
+                    for l, m in zip((dice_lst, spec_lst, prec_lst, rec_lst, f1_lst, jac_lst), metrics):
+                        l.append(m)
+
+    return (
+        sum(dice_lst) / len(dice_lst),
+        sum(spec_lst) / len(spec_lst),
+        sum(prec_lst) / len(prec_lst),
+        sum(rec_lst) / len(rec_lst),
+        sum(f1_lst) / len(f1_lst),
+        sum(jac_lst) / len(jac_lst)
+    )
+
 
 
 def random_click(mask, point_label = 1):
