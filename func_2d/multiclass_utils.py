@@ -384,25 +384,58 @@ def eval_seg(pred,true_mask_p,threshold):
             
         return iou_d / len(threshold), iou_c / len(threshold), disc_dice / len(threshold), cup_dice / len(threshold)
     elif c > 2: # for multi-class segmentation > 2 classes
-        ious = [0] * c
-        dices = [0] * c
-        pred_t = pred if isinstance(pred, torch.Tensor) \
-            else torch.from_numpy(pred)
-        for th in threshold:
-            gt_vmask_p = (true_mask_p > th).float()
-            vpred = (pred_t > th).float()
-            vpred_cpu = vpred.cpu()
-            for i in range(0, c):
-                pred_i = vpred_cpu[:,i,:,:].numpy().astype('int32')
-                mask = gt_vmask_p[:,i,:,:].squeeze(1).cpu().numpy().astype('int32')
-        
-                '''iou for numpy'''
-                ious[i] += iou(pred_i,mask)
+        B, C, H, W  = pred.shape
+        device = pred.device
+        eps = 1e-6
 
-                '''dice for torch'''
-                dices[i] += dice_coeff(vpred[:,i,:,:], gt_vmask_p[:,i,:,:]).item()
-            
-        return tuple(np.array(ious + dices) / len(threshold)) # tuple has a total number of c * 2
+        sum_dice = torch.zeros(C, device=device)
+        sum_jaccard = torch.zeros(C, device=device)
+        sum_precision = torch.zeros(C, device=device)
+        sum_recall = torch.zeros(C, device=device)
+        sum_specificity = torch.zeros(C, device=device)
+        sum_f1 = torch.zeros(C, device=device)
+
+        for th in threshold:
+            bin_pred = (pred > th).float()
+            bin_true = (true_mask_p > th).float()
+
+            for cls in range(C):
+                p = bin_pred[:, cls].reshape(B, -1)
+                t = bin_true[:, cls].reshape(B, -1)
+
+                TP = (p * t).sum(dim=1)
+                FP = (p * (1 - t)).sum(dim=1)
+                FN = ((1 - p) * t).sum(dim=1)
+                TN = ((1 - p) * (1 - t)).sum(dim=1)
+
+                precision = (TP + eps) / (TP + FP + eps)
+                recall = (TP + eps) / (TP + FN + eps)
+                specificity = (TN + eps) / (TN + FN + eps)
+                f1 = (2 * precision * recall + eps) / (precision + recall + eps)
+                inter = TP
+                union = TP + FP + FN
+                jaccard = (inter + eps) / (union + eps)
+                dice = (2 * inter + eps) / (2 * inter + FP + FN + eps)
+
+                sum_precision[cls] += precision.mean()
+                sum_recall[cls] += recall.mean()
+                sum_specificity[cls] += specificity.mean()
+                sum_f1[cls] += f1.mean()
+                sum_jaccard[cls] += jaccard.mean()
+                sum_dice[cls] += dice.mean()
+
+        n_th = len(threshold)
+        precision_per_cls = (sum_precision / n_th).tolist()
+        recall_per_cls = (sum_recall / n_th).tolist()
+        specificity_per_cls = (sum_specificity / n_th).tolist()
+        f1_per_cls = (sum_f1 / n_th).tolist()
+        jaccard_per_cls = (sum_jaccard / n_th).tolist()
+        dice_per_cls = (sum_dice / n_th).tolist()
+
+        return dice_per_cls, specificity_per_cls, precision_per_cls, recall_per_cls, f1_per_cls, jaccard_per_cls
+
+
+
     else:
         eiou, edice = 0,0
         for th in threshold:

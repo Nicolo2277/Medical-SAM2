@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader, random_split, ConcatDataset
 
 import cfg
 import func_2d.function as function
-from conf import settings  #maybe global_settings?
+from conf import settings  
 #from models.discriminatorlayer import discriminator
 from func_2d.OTU_dataset import *
 from func_2d.utils import *
@@ -37,15 +37,17 @@ def main():
     args = cfg.parse_args()
     GPUdevice = torch.device('cuda', args.gpu_device)
 
-    # initialize wandb run
-    wandb.init(
-        project="MedSAM-2",
-        name='Binary Mask Segmentation',
-        config=dict(vars(args))  # logs all your args as hyperparameters
-        )
-    
-    random.seed(args.random_seed)
     for fold in range(args.num_folds):
+        # initialize wandb run
+        wandb.init(
+            #mode='offline',
+            project="MEDSAM-2",
+            name='Binary Mask Segmentation Pretraining',
+            config=dict(vars(args))  # logs all your args as hyperparameters
+            )
+    
+        random.seed(args.random_seed)
+
         print('Starting training for fold number ', fold)
         net = get_network(args, args.net, use_gpu=args.gpu, gpu_device=GPUdevice, distribution=args.distributed)
 
@@ -72,7 +74,7 @@ def main():
 
         #optimization
         optimizer = optim.Adam(net.parameters(), lr=args.lr, betas=(0.9, 0.999), eps=1e-08, weight_decay=0, amsgrad=False)
-        #scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.5)
+        scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.5)
 
         args.path_helper = set_log_dir('logs', args.exp_name)
         logger = create_logger(args.path_helper['log_path'])
@@ -109,15 +111,15 @@ def main():
         #print('The len of the main train dataset is: ', len(train_main))
         #print('The len of the main val dataset is: ', len(val_main))
 
-        train_dataset = ConcatDataset([train_OTU, train_main])
-        val_dataset = ConcatDataset([val_OTU, val_main])
+        train_dataset = ConcatDataset([train_main, train_OTU])
+        val_dataset = ConcatDataset([val_main, val_OTU])
     
         print('The len of the full dataset is: ', len(train_dataset) + len(val_dataset))
         print('The len of the train dataset is: ', len(train_dataset))
         print('The len of the val dataset is: ', len(val_dataset))
         
-        train_loader = DataLoader(train_dataset, batch_size=args.b, shuffle=True, num_workers=2, pin_memory=True)
-        test_loader = DataLoader(val_dataset, batch_size=args.b, shuffle=False, num_workers=2, pin_memory=True)
+        train_loader = DataLoader(train_dataset, batch_size=args.b, shuffle=True, num_workers=8, pin_memory=True)
+        test_loader = DataLoader(val_dataset, batch_size=args.b, shuffle=False, num_workers=8, pin_memory=True)
 
         '''checkpoint path'''
         checkpoint_path = os.path.join(settings.CHECKPOINT_PATH, args.net, settings.TIME_NOW)
@@ -147,6 +149,7 @@ def main():
             net.train()
             time_start = time.time()
             loss = function.train_sam(args, net, optimizer, train_loader, epoch)
+            scheduler.step()
             logger.info(f'Training loss: {loss} || @ epoch {epoch}.')
             time_end = time.time()
             print('time_for_training ', time_end - time_start)

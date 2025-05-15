@@ -75,6 +75,7 @@ def build_sam2_video_predictor(
         model.eval()
     return model
 
+'''
 
 def _load_checkpoint(model, ckpt_path):
     if ckpt_path is not None:
@@ -115,4 +116,3 @@ def _load_checkpoint(model, ckpt_path):
                 logging.warning(f"  {k}")
 
         logging.info("Loaded checkpoint (downsampler re-initialized) successfully")
-'''

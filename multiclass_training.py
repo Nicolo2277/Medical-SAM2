@@ -36,16 +36,17 @@ def main():
     args = cfg.parse_args()
     GPUdevice = torch.device('cuda', args.gpu_device)
 
-    # initialize wandb run
-    wandb.init(
-        project="MedSAM-2",
-        name='multiclass Mask Segmentation',
-        config=dict(vars(args))  # logs all your args as hyperparameters
-        )
-    
-    random.seed(args.random_seed)
     for fold in range(args.num_folds):
+        # initialize wandb run
+        wandb.init(
+            project="MedSAM-2 final",
+            name=f'multiclass Mask Segmentation fold {fold}',
+            config=dict(vars(args))  # logs all your args as hyperparameters
+            )
+        
+        random.seed(args.random_seed)
         print('Starting training for fold number ', fold)
+
         net = get_network(args, args.net, use_gpu=args.gpu, gpu_device=GPUdevice, distribution=args.distributed)
 
         '''
@@ -82,23 +83,25 @@ def main():
             transforms.ToTensor()
         ])
 
-        main_datapath = './Preliminary-data'#'./Folds/fold_' + str(fold)
-        dataset = MainDataset(args, data_path=main_datapath, transforms_img=main_transforms)
-        train_size = int(0.8 * len(dataset))
-        val_size = len(dataset) - train_size
-        train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
+        input_root = 'Multiclass_Folds/fold_' + str(fold)
+
+        train_path = os.path.join(input_root, 'train')
+        full_train_dataset = MainDataset(args=args, data_path=train_path, transforms_img=main_transforms)
+
+        val_path = os.path.join(input_root, 'val')
+        full_val_dataset = MainDataset(args=args, data_path=val_path, transforms_img=main_transforms)               
 
         
         #print('The len of the main train dataset is: ', len(train_main))
         #print('The len of the main val dataset is: ', len(val_main))
 
     
-        print('The len of the full dataset is: ', len(train_dataset) + len(val_dataset))
-        print('The len of the train dataset is: ', len(train_dataset))
-        print('The len of the val dataset is: ', len(val_dataset))
+        print('The len of the full dataset is: ', len(full_train_dataset) + len(full_val_dataset))
+        print('The len of the train dataset is: ', len(full_train_dataset))
+        print('The len of the val dataset is: ', len(full_val_dataset))
         
-        train_loader = DataLoader(train_dataset, batch_size=args.b, shuffle=True, num_workers=2, pin_memory=True)
-        test_loader = DataLoader(val_dataset, batch_size=args.b, shuffle=False, num_workers=2, pin_memory=True)
+        train_loader = DataLoader(full_train_dataset, batch_size=args.b, shuffle=True, num_workers=args.num_workers, pin_memory=True)
+        test_loader = DataLoader(full_val_dataset, batch_size=args.b, shuffle=False, num_workers=args.num_workers, pin_memory=True)
 
         '''checkpoint path'''
         checkpoint_path = os.path.join(settings.CHECKPOINT_PATH, args.net, settings.TIME_NOW)
@@ -121,8 +124,8 @@ def main():
 
         for epoch in range(settings.EPOCH):
             if epoch == 0:
-                val_loss, mean_dice, mean_specificity, mean_precision, mean_recall, mean_f_measure, mean_jaccard = function.validation_sam(args, test_loader, epoch, net)
-                logger.info(f'Val loss: {val_loss}, Jaccard: {mean_jaccard}, DICE: {mean_dice} || @ epoch {epoch}.')
+                val_loss, mean_dice = function.validation_sam(args, test_loader, epoch, net)
+                logger.info(f'Val loss: {val_loss}, DICE: {mean_dice} || @ epoch {epoch}.')
             
             #training
             net.train()
@@ -135,8 +138,8 @@ def main():
             #validation
             net.eval()
             if epoch % args.val_freq == 0 or epoch == settings.EPOCH-1:
-                val_loss, mean_dice, mean_specificity, mean_precision, mean_recall, mean_f_measure, mean_jaccard = function.validation_sam(args, test_loader, epoch, net)
-                logger.info(f'Val loss: {val_loss}, Jaccard: {mean_jaccard}, DICE: {mean_dice} || @ epoch {epoch}.')
+                val_loss, mean_dice = function.validation_sam(args, test_loader, epoch, net)
+                logger.info(f'Val loss: {val_loss}, DICE: {mean_dice} || @ epoch {epoch}.')
 
                 if mean_dice > best_dice:
                     best_dice = mean_dice

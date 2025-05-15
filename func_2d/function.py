@@ -252,7 +252,7 @@ def train_sam(args, net: nn.Module, optimizer, train_loader, epoch):
             "train/loss_batch": loss.item(),
             "train/learning_rate": optimizer.param_groups[0]["lr"],
             # can add also memory_bank_size = len(memory_bank_list)
-            }, step=epoch * len(train_loader) + ind)
+            })
             
             optimizer.step()
             
@@ -261,7 +261,7 @@ def train_sam(args, net: nn.Module, optimizer, train_loader, epoch):
             pbar.update()
 
     avg_loss = epoch_loss / len(train_loader)
-    wandb.log({"train/loss_epoch": avg_loss}, step=epoch)
+    wandb.log({"train/loss_epoch": avg_loss})
 
     return epoch_loss/len(train_loader)
 
@@ -484,11 +484,9 @@ def validation_sam(args, val_loader, epoch, net: nn.Module, clean_dir=True):
 
                 pred_flat = pred.argmax(dim=1).view(-1).cpu().numpy()            # [b * h * w]
 
-                # (2) Compute the confusion matrix with sklearn
                 c = 2 #num_classes
                 cm = confusion_matrix(gt_flat, pred_flat, labels=list(range(c)))
 
-                # (3) Log it to W&B
                 wandb.log({
                     "confusion_matrix": wandb.plot.confusion_matrix(
                         probs=None,
@@ -496,7 +494,7 @@ def validation_sam(args, val_loader, epoch, net: nn.Module, clean_dir=True):
                         preds=pred_flat,
                         class_names=[f"class_{i}" for i in range(c)]
                     )
-                }, step=epoch)
+                })
 
                 '''vis images'''
                 if ind % args.vis == 0:
@@ -526,7 +524,7 @@ def validation_sam(args, val_loader, epoch, net: nn.Module, clean_dir=True):
         "val/Recall": mean_recall,
         "val/F1": mean_f_measure,
         "val/Jaccard": mean_jaccard
-    }, step=epoch)
+    })
 
     return (
         val_loss,

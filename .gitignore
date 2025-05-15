@@ -170,3 +170,8 @@ wandb/
 Folds/
 multiclass_sample/
 *.pt
+Multiclass_Folds/
+clinical-cases-metadata-holsbeke.csv/
+checkpoint/
+checkpoints/
+

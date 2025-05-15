@@ -30,6 +30,10 @@ def parse_args():
     parser.add_argument('-random_seed', type=int, default=42)
     parser.add_argument('-num_folds', type=int, default=5, help='number of folds')
     parser.add_argument('-b_val', type=int, default=1)
+    parser.add_argument('-epochs', type=int, default=100, help='number of epochs to be performed')
+    parser.add_argument('-cv_group', type=str, help='Cross validation group')
+    parser.add_argument('-num_classes', type=int, default=3)
+    parser.add_argument('-num_workers', type=int, default=6)
     parser.add_argument(
     '-data_path',
     type=str,
